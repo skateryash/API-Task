@@ -21,7 +21,7 @@ class FEmployee(models.Model):
     department = models.CharField(max_length=50)
     designation = models.CharField(max_length=50, null=True)
     status = models.CharField(max_length=50, choices=STATUS, default='Created')
-    source = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='employees')
+    job = models.ManyToManyField(Job, related_name='femployees')
 
 
 class SEmployee(models.Model):
@@ -34,7 +34,6 @@ class SEmployee(models.Model):
     email = models.EmailField(max_length=254)
     mobile = models.CharField(max_length=10)
     department = models.CharField(max_length=50)
-    designation = models.CharField(max_length=50)
     salary = models.FloatField(default=0.0)
     status = models.CharField(max_length=50, choices=STATUS, default='Created')
-    source = models.ForeignKey(Job, on_delete=models.CASCADE)
+    job = models.ManyToManyField(Job, related_name='semployees')

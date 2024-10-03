@@ -3,6 +3,7 @@ from .serializer import FEmployeeSerializer, SEmployeeSerializer
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
+import json
 
 @api_view(['POST'])
 def add(request):
@@ -11,9 +12,7 @@ def add(request):
         job = Job.objects.create(name=f"JOB_{Job.objects.count() + 1}")
 
         femployees_to_create = []
-        femployees_to_update = []
         semployees_to_create = []
-        semployees_to_update = []
 
         for emp_data in data:
             fserializer = FEmployeeSerializer(data=emp_data)
@@ -26,8 +25,8 @@ def add(request):
                     femployee.department = fserializer.validated_data.get('department', femployee.department)
                     femployee.designation = fserializer.validated_data.get('designation', femployee.designation)
                     femployee.status = 'Updated'
-                    femployee.source = job
-                    femployees_to_update.append(femployee)
+                    femployee.save()
+                    femployee.job.add(job)
                 else:
                     femployees_to_create.append(FEmployee(
                         id = fserializer.validated_data.get('id'),
@@ -36,7 +35,6 @@ def add(request):
                         mobile = fserializer.validated_data.get('mobile'),
                         department = fserializer.validated_data.get('department'),
                         designation = fserializer.validated_data.get('designation'),
-                        source = job
                     ))
             else:
                 return Response({
@@ -54,8 +52,8 @@ def add(request):
                     semployee.department = sserializer.validated_data.get('department', semployee.department)
                     semployee.salary = sserializer.validated_data.get('salary')
                     semployee.status = 'Updated'
-                    semployee.source = job
-                    semployees_to_update.append(semployee)
+                    semployee.save()
+                    semployee.job.add(job)
                 else:
                     semployees_to_create.append(SEmployee(
                         id = sserializer.validated_data.get('id'),
@@ -64,7 +62,6 @@ def add(request):
                         mobile = sserializer.validated_data.get('mobile'),
                         department = sserializer.validated_data.get('department'),
                         salary = sserializer.validated_data.get('salary'),
-                        source = job
                         ))
             else:
                 return Response({
@@ -74,29 +71,61 @@ def add(request):
         
         if femployees_to_create:
             FEmployee.objects.bulk_create(femployees_to_create)
-        if femployees_to_update:
-            FEmployee.objects.bulk_update(femployees_to_update, ['id', 'name', 'email', 'mobile', 'department', 'designation', 'status', 'source'])
-
+        
         if semployees_to_create:
             SEmployee.objects.bulk_create(semployees_to_create)
-        if semployees_to_update:
-            SEmployee.objects.bulk_update(semployees_to_update, ['id', 'name', 'email', 'mobile', 'department', 'salary', 'status', 'source'])
 
+        for emp in femployees_to_create:
+            emp.job.add(job)
+
+        for emp in semployees_to_create:
+            emp.job.add(job)
+        
         job.status = 'Success'
         job.save()
         return Response({'status': 'success', 'message': 'Data Operation Successful'}, status=status.HTTP_200_OK)
     except:
         return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': 'Internal Server Error'})
     
-
-
 @api_view(['GET'])
 def get(request):
-    jobs = Job.objects.all()
+    try:
+        params = request.query_params
 
-    all_jobs = []
+        if params:
+            params = json.loads(params['ids'])
+            jobs = Job.objects.filter(id__in=params)
+        else:
+            jobs = Job.objects.all()
 
-    for job in jobs:
-        all_jobs.append({'name': job.name, 'status': job.status})
+        result = {}
 
-    return Response({'data': all_jobs})
+        for job in jobs:
+            emp1 = FEmployee.objects.filter(job=job.id)
+            emp2 = SEmployee.objects.filter(job=job.id)
+
+            emp1_created_id = [emp.id for emp in emp1 if emp.status == "Created"]
+            emp1_updated_id = [emp.id for emp in emp1 if emp.status == "Updated"]
+
+            emp2_created_id = [emp.id for emp in emp2 if emp.status == "Created"]
+            emp2_updated_id = [emp.id for emp in emp2 if emp.status == "Updated"]
+
+            result[job.name] = {
+                "Status": job.status,
+                "Employee1": {
+                    "Created Count": len(emp1_created_id),
+                    "Created Ids": emp1_created_id,
+                    "Updated Count": len(emp1_updated_id),
+                    "Updated IDs": emp1_updated_id
+                },
+                "Employee2": {
+                    "Created Count": len(emp2_created_id),
+                    "Created Ids": emp2_created_id,
+                    "Updated Count": len(emp2_updated_id),
+                    "Updated IDs": emp2_updated_id
+                },
+            }
+
+        return Response(result)
+    except:
+        return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': 'Internal Server Error'})
