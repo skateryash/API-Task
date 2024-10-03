@@ -21,7 +21,7 @@ class FEmployee(models.Model):
     department = models.CharField(max_length=50)
     designation = models.CharField(max_length=50, null=True)
     status = models.CharField(max_length=50, choices=STATUS, default='Created')
-    job = models.ManyToManyField(Job, related_name='femployees')
+    job = models.CharField(max_length=200, default='')
 
 
 class SEmployee(models.Model):
@@ -36,4 +36,4 @@ class SEmployee(models.Model):
     department = models.CharField(max_length=50)
     salary = models.FloatField(default=0.0)
     status = models.CharField(max_length=50, choices=STATUS, default='Created')
-    job = models.ManyToManyField(Job, related_name='semployees')
+    job = models.CharField(max_length=200, default='')

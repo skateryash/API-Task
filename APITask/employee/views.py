@@ -3,8 +3,9 @@ from .serializer import FEmployeeSerializer, SEmployeeSerializer
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-import json
+from drf_yasg.utils import swagger_auto_schema
 
+@swagger_auto_schema(method='post', request_body=FEmployeeSerializer)
 @api_view(['POST'])
 def add(request):
     try:
@@ -12,7 +13,9 @@ def add(request):
         job = Job.objects.create(name=f"JOB_{Job.objects.count() + 1}")
 
         femployees_to_create = []
+        femployees_to_update = []
         semployees_to_create = []
+        semployees_to_update = []
 
         for emp_data in data:
             fserializer = FEmployeeSerializer(data=emp_data)
@@ -25,8 +28,12 @@ def add(request):
                     femployee.department = fserializer.validated_data.get('department', femployee.department)
                     femployee.designation = fserializer.validated_data.get('designation', femployee.designation)
                     femployee.status = 'Updated'
-                    femployee.save()
-                    femployee.job.add(job)
+
+                    current_jobs = eval(femployee.job)
+                    current_jobs.append(job.id)
+                    femployee.job = str(current_jobs)
+
+                    femployees_to_update.append(femployee)
                 else:
                     femployees_to_create.append(FEmployee(
                         id = fserializer.validated_data.get('id'),
@@ -35,6 +42,7 @@ def add(request):
                         mobile = fserializer.validated_data.get('mobile'),
                         department = fserializer.validated_data.get('department'),
                         designation = fserializer.validated_data.get('designation'),
+                        job = str([job.id])
                     ))
             else:
                 return Response({
@@ -52,8 +60,12 @@ def add(request):
                     semployee.department = sserializer.validated_data.get('department', semployee.department)
                     semployee.salary = sserializer.validated_data.get('salary')
                     semployee.status = 'Updated'
-                    semployee.save()
-                    semployee.job.add(job)
+
+                    current_jobs = eval(semployee.job)
+                    current_jobs.append(job.id)
+                    semployee.job = str(current_jobs)
+
+                    semployees_to_update.append(semployee)
                 else:
                     semployees_to_create.append(SEmployee(
                         id = sserializer.validated_data.get('id'),
@@ -62,6 +74,7 @@ def add(request):
                         mobile = sserializer.validated_data.get('mobile'),
                         department = sserializer.validated_data.get('department'),
                         salary = sserializer.validated_data.get('salary'),
+                        job = str([job.id])
                         ))
             else:
                 return Response({
@@ -71,21 +84,19 @@ def add(request):
         
         if femployees_to_create:
             FEmployee.objects.bulk_create(femployees_to_create)
+        if femployees_to_update:
+            FEmployee.objects.bulk_update(femployees_to_update, ['name', 'email', 'mobile', 'department', 'designation', 'status', 'job'])
         
         if semployees_to_create:
             SEmployee.objects.bulk_create(semployees_to_create)
-
-        for emp in femployees_to_create:
-            emp.job.add(job)
-
-        for emp in semployees_to_create:
-            emp.job.add(job)
+        if semployees_to_update:
+            SEmployee.objects.bulk_update(semployees_to_update, ['name', 'email', 'mobile', 'department', 'salary', 'status', 'job'])
         
         job.status = 'Success'
         job.save()
         return Response({'status': 'success', 'message': 'Data Operation Successful'}, status=status.HTTP_200_OK)
-    except:
-        return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': 'Internal Server Error'})
+    except Exception as e:
+        return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': f'Internal Server Error: {str(e)}'})
     
 @api_view(['GET'])
 def get(request):
@@ -93,16 +104,17 @@ def get(request):
         params = request.query_params
 
         if params:
-            params = json.loads(params['ids'])
-            jobs = Job.objects.filter(id__in=params)
+            # params = json.loads(params['ids'])
+            job_ids = eval(params['ids'])
+            jobs = Job.objects.filter(id__in=job_ids)
         else:
             jobs = Job.objects.all()
 
         result = {}
 
         for job in jobs:
-            emp1 = FEmployee.objects.filter(job=job.id)
-            emp2 = SEmployee.objects.filter(job=job.id)
+            emp1 = FEmployee.objects.filter(job__contains=f'{job.id}')
+            emp2 = SEmployee.objects.filter(job__contains=f'{job.id}')
 
             emp1_created_id = [emp.id for emp in emp1 if emp.status == "Created"]
             emp1_updated_id = [emp.id for emp in emp1 if emp.status == "Updated"]
@@ -127,5 +139,6 @@ def get(request):
             }
 
         return Response(result)
-    except:
-        return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': 'Internal Server Error'})
+    except Exception as e:
+        return Response({'status': status.HTTP_500_INTERNAL_SERVER_ERROR, 'message': f'Internal Server Error: {str(e)}'})
+    
